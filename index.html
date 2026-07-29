@@ -1,0 +1,2030 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة حروف مع عمر</title>
+    <!-- Google Fonts: Cairo & Tajawal -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Load MQTT client library -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <style>
+        /* --- DESIGN SYSTEM & CSS VARIABLES --- */
+        :root {
+            --bg-dark: #080711;
+            --bg-panel: rgba(13, 11, 28, 0.65);
+            --bg-panel-hover: rgba(22, 18, 46, 0.85);
+            --border-glass: rgba(255, 255, 255, 0.08);
+            
+            --primary-violet: #8b5cf6;
+            --primary-violet-glow: rgba(139, 92, 246, 0.6);
+            --secondary-cyan: #06b6d4;
+            --secondary-cyan-glow: rgba(6, 182, 212, 0.6);
+            
+            --color-text: #e2e8f0;
+            --color-text-muted: #94a3b8;
+            --color-success: #10b981;
+            --color-danger: #ef4444;
+            
+            --font-heading: 'Cairo', sans-serif;
+            --font-body: 'Tajawal', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--color-text);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+            padding: 20px;
+        }
+
+        /* Background glow orbs */
+        .glow-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(150px);
+            z-index: -1;
+            opacity: 0.45;
+            pointer-events: none;
+        }
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, var(--primary-violet-glow) 0%, transparent 70%);
+            top: -100px;
+            right: -100px;
+        }
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, var(--secondary-cyan-glow) 0%, transparent 70%);
+            bottom: -100px;
+            left: -100px;
+        }
+
+        /* --- HEADER --- */
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-glass);
+            margin-bottom: 25px;
+        }
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-logo h1 {
+            font-family: var(--font-heading);
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(139, 92, 246, 0.3);
+        }
+        .logo-badge {
+            background: rgba(6, 182, 212, 0.15);
+            color: #06b6d4;
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 20px;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* --- BUTTONS --- */
+        .btn-icon {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            color: #94a3b8;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .btn-icon.active {
+            background: rgba(139, 92, 246, 0.2);
+            border-color: #8b5cf6;
+            color: #c084fc;
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+        }
+        .btn-text-icon {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            color: #94a3b8;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.25s ease;
+        }
+        .btn-text-icon.active {
+            background: rgba(6, 182, 212, 0.2);
+            border-color: #06b6d4;
+            color: #22d3ee;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+        }
+        .btn-primary-neon {
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-family: var(--font-heading);
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .btn-primary-neon.bg-violet {
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+        }
+        .btn-primary-neon.bg-cyan {
+          background: linear-gradient(135deg, #06b6d4, #0891b2);
+          box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+        }
+        .btn-primary-neon:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.2);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: var(--font-heading);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.25s ease;
+            width: 100%;
+        }
+        .btn-danger:hover {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        /* --- LOBBY SELECTION VIEW --- */
+        .lobby-selection-view {
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        .menu-hero {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .menu-hero h2 {
+            font-family: var(--font-heading);
+            font-size: 2.2rem;
+            background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .menu-hero p {
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+        .lobby-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+        }
+        .lobby-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-glass);
+            border-radius: 20px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: right;
+            backdrop-filter: blur(10px);
+        }
+        .lobby-card:hover {
+            transform: translateY(-5px);
+            background: rgba(22, 18, 46, 0.85);
+        }
+        .lobby-card.border-violet {
+            border-color: rgba(139, 92, 246, 0.25);
+            box-shadow: 0 10px 30px rgba(139, 92, 246, 0.1);
+        }
+        .lobby-card.border-cyan {
+            border-color: rgba(6, 182, 212, 0.25);
+            box-shadow: 0 10px 30px rgba(6, 182, 212, 0.1);
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 15px;
+            flex-direction: row-reverse;
+        }
+        .card-header h3 {
+            font-family: var(--font-heading);
+            font-size: 1.3rem;
+            color: #fff;
+        }
+        .card-inputs {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .input-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .input-item label {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .input-item input, .input-item select {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.2s ease;
+            text-align: right;
+        }
+        .input-item input:focus, .input-item select:focus {
+            border-color: #8b5cf6;
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.2);
+        }
+        .input-item-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .waiting-lobby {
+            max-width: 500px;
+            margin: 100px auto;
+            width: 100%;
+        }
+        .loading-card {
+            background: rgba(13, 11, 28, 0.7);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 10px 40px rgba(6, 182, 212, 0.15);
+            backdrop-filter: blur(10px);
+        }
+
+        /* --- GAMEPLAY VIEW --- */
+        .game-view {
+            display: grid;
+            grid-template-columns: 320px 1fr 300px;
+            gap: 25px;
+            flex-grow: 1;
+            align-items: stretch;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            padding-bottom: 30px;
+        }
+        @media (max-width: 1080px) {
+            .game-view {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Scorecard */
+        .score-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            backdrop-filter: blur(10px);
+        }
+        .team-score {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 5px;
+        }
+        .team-score.red { color: #f87171; }
+        .team-score.green { color: #34d399; }
+        .team-marker { font-size: 1.2rem; font-weight: bold; }
+        .score-name { font-size: 0.85rem; font-weight: 500; color: #94a3b8; max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .score-val { font-size: 2.2rem; font-family: var(--font-heading); font-weight: 800; }
+        .team-score.red .score-val { text-shadow: 0 0 20px rgba(239, 68, 68, 0.35); }
+        .team-score.green .score-val { text-shadow: 0 0 20px rgba(16, 185, 129, 0.35); }
+        .score-divider { color: #64748b; font-weight: bold; font-size: 0.8rem; }
+
+        .turn-banner {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .turn-banner.red { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); color: #f87171; }
+        .turn-banner.green { border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); color: #34d399; }
+
+        /* Omar Interactive Card */
+        .aziz-interactive-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            backdrop-filter: blur(10px);
+        }
+        .aziz-bubble-live {
+            position: relative;
+            background: #1e1b4b;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            padding: 12px;
+            border-radius: 12px;
+            color: #d8b4fe;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            text-align: center;
+            width: 100%;
+        }
+        .aziz-bubble-live .bubble-arrow {
+            left: 50%;
+            bottom: -8px;
+            top: auto;
+            transform: translateX(-50%) rotate(45deg);
+            border-top: none; border-left: none;
+            border-right: 1px solid rgba(139, 92, 246, 0.3);
+            border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+        }
+        .aziz-face {
+            width: 70px; height: 70px;
+            background: radial-gradient(circle, #fbcfe8, #f472b6);
+            border-radius: 50%; border: 3px solid #db2777;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+            position: relative; box-shadow: 0 0 20px rgba(219, 39, 119, 0.4); flex-shrink: 0;
+        }
+        .aziz-eyes { display: flex; gap: 14px; }
+        .aziz-eye { width: 14px; height: 14px; background: #fff; border-radius: 50%; position: relative; display: flex; align-items: center; justify-content: center; }
+        .pupil { width: 6px; height: 6px; background: #000; border-radius: 50%; transition: all 0.2s ease; }
+        .aziz-mouth { width: 20px; height: 8px; border-bottom: 3px solid #000; border-radius: 0 0 10px 10px; transition: all 0.2s ease; }
+        .aziz-face.thinking { animation: face-thinking-anim 1.5s infinite alternate; }
+        .aziz-face.thinking .aziz-mouth { width: 15px; height: 3px; background: #000; border-radius: 2px; border: none; }
+        .aziz-face.thinking .pupil { transform: translateY(-2px); }
+        .aziz-face.happy { animation: face-happy-anim 0.5s infinite alternate; }
+        .aziz-face.happy .aziz-mouth { width: 22px; height: 12px; background: #000; border-radius: 0 0 22px 22px; border: none; }
+        .aziz-face.happy .aziz-eye { height: 8px; border-radius: 12px 12px 0 0; background: transparent; border-top: 3px solid #000; }
+        .aziz-face.sad .aziz-mouth { width: 20px; height: 8px; border-top: 3px solid #000; border-bottom: none; border-radius: 10px 10px 0 0; transform: translateY(3px); }
+        .aziz-face.sad .pupil { transform: translateY(2px); }
+        .aziz-name { font-family: var(--font-heading); font-size: 0.9rem; color: #c084fc; }
+
+        @keyframes face-thinking-anim { 0% { transform: translateY(0) rotate(0); } 100% { transform: translateY(-5px) rotate(5deg); } }
+        @keyframes face-happy-anim { 0% { transform: scale(1); } 100% { transform: scale(1.08) translateY(-2px); } }
+
+        /* Connected players list */
+        .players-list-scroll {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .player-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            flex-direction: row-reverse;
+        }
+        .bullet { width: 8px; height: 8px; border-radius: 50%; }
+        .bullet.red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .bullet.green { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+        .player-name-txt { flex-grow: 1; font-size: 0.85rem; color: #fff; font-weight: bold; text-align: right; }
+        .team-tag { font-size: 0.72rem; color: #94a3b8; }
+        .no-players { font-size: 0.8rem; color: #64748b; text-align: center; }
+
+        /* Sound board, logs, rules */
+        .soundboard-card, .logs-card, .rules-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-glass);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: right;
+            backdrop-filter: blur(10px);
+        }
+        .soundboard-card h4, .logs-card h4, .rules-card h4 {
+            font-family: var(--font-heading);
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 8px;
+        }
+        .sound-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .sound-btn {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-glass); color: #fff;
+            padding: 8px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.8rem; transition: all 0.2s ease;
+        }
+        .sound-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+        .logs-content { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+        .log-entry { font-size: 0.8rem; color: #94a3b8; line-height: 1.4; }
+        .log-bullet { color: #8b5cf6; }
+        .rules-content { display: flex; flex-direction: column; gap: 8px; font-size: 0.8rem; color: #94a3b8; line-height: 1.5; }
+        .highlight-code { font-family: monospace; font-size: 1.1rem; color: #22d3ee; font-weight: 900; }
+
+        /* --- GRID --- */
+        .grid-panel {
+            background: rgba(13, 11, 28, 0.35); border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 20px; padding: 20px; display: flex; flex-direction: column; justify-content: center; position: relative;
+        }
+        .grid-boundaries { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        .grid-center-container { display: flex; align-items: center; justify-content: center; gap: 15px; width: 100%; }
+        .arrow-indicator { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; white-space: nowrap; }
+        .arrow-indicator.top-green, .arrow-indicator.bottom-green { color: #10b981; text-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
+        .arrow-indicator.left-red, .arrow-indicator.right-red {
+            color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+            writing-mode: vertical-rl; text-orientation: mixed; display: flex; align-items: center; gap: 5px;
+        }
+
+        .svg-wrapper { flex-grow: 1; display: flex; justify-content: center; align-items: center; max-width: 580px; }
+        .honeycomb-svg { width: 100%; height: auto; max-height: 480px; }
+
+        /* SVG Hexagons */
+        .hex-polygon { fill: rgba(18, 16, 38, 0.75); stroke: rgba(139, 92, 246, 0.25); stroke-width: 2.2; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .hex-glow { fill: none; stroke: none; stroke-width: 6; opacity: 0; transition: all 0.3s ease; }
+        .hex-text { font-family: var(--font-heading); font-size: 1.15rem; font-weight: 800; fill: #94a3b8; transition: all 0.3s ease; pointer-events: none; }
+        .hex-group:hover .hex-polygon { fill: rgba(30, 27, 75, 0.95); stroke: #8b5cf6; filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.6)); }
+        .hex-group:hover .hex-text { fill: #fff; font-size: 1.3rem; }
+        .hex-active .hex-polygon { fill: rgba(251, 191, 36, 0.15); stroke: #fbbf24; }
+        .hex-active .hex-glow { stroke: rgba(251, 191, 36, 0.4); opacity: 1; animation: hex-pulsate 1.5s infinite alternate; }
+        .hex-active .hex-text { fill: #fbbf24; }
+        .hex-red .hex-polygon { fill: rgba(239, 68, 68, 0.35); stroke: #ef4444; }
+        .hex-red .hex-glow { stroke: rgba(239, 68, 68, 0.5); opacity: 1; }
+        .hex-red .hex-text { fill: #fff; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
+        .hex-green .hex-polygon { fill: rgba(16, 185, 129, 0.35); stroke: #10b981; }
+        .hex-green .hex-glow { stroke: rgba(16, 185, 129, 0.5); opacity: 1; }
+        .hex-green .hex-text { fill: #fff; text-shadow: 0 0 10px rgba(16, 185, 129, 0.8); }
+        .hex-blocked .hex-polygon { fill: rgba(51, 65, 85, 0.4); stroke: #475569; }
+        .hex-blocked .hex-text { fill: #475569; }
+
+        .player-board-view { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .player-board-view h3 { font-family: var(--font-heading); color: #06b6d4; font-size: 1.2rem; }
+        .footer-tip { font-size: 0.8rem; color: #64748b; text-align: center; }
+
+        @keyframes hex-pulsate { 0% { stroke-width: 4; opacity: 0.3; } 100% { stroke-width: 8; opacity: 0.8; } }
+
+        /* Winner banner */
+        .winner-announcement {
+            position: absolute; inset: 15px; background: rgba(8, 7, 17, 0.95); border: 2px dashed #06b6d4; border-radius: 20px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 20px;
+            z-index: 10; padding: 30px; box-shadow: 0 0 40px rgba(6, 182, 212, 0.25);
+        }
+        .winner-crown { font-size: 3rem; animation: victory-bounce 1s infinite alternate; }
+        .winner-announcement h2 { font-family: var(--font-heading); font-size: 2rem; color: #fff; }
+        .winner-announcement p { color: #94a3b8; max-width: 400px; }
+
+        @keyframes victory-bounce { 0% { transform: translateY(0) scale(1); } 100% { transform: translateY(-8px) scale(1.1); } }
+
+        /* --- MODAL DIALOG --- */
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(4, 3, 10, 0.85); backdrop-filter: blur(10px);
+            display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+        }
+        .modal-content {
+            background: #0d0b1c; border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 20px;
+            width: 100%; max-width: 580px; padding: 30px; position: relative;
+            box-shadow: 0 15px 40px rgba(139, 92, 246, 0.2); text-align: right;
+        }
+        .modal-close {
+            position: absolute; top: 20px; left: 20px; background: rgba(255, 255, 255, 0.05);
+            border: none; color: #94a3b8; width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease;
+        }
+        .modal-close:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+        .modal-header-q {
+            display: flex; align-items: center; gap: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 15px; margin-bottom: 20px; flex-direction: row-reverse;
+        }
+        .q-letter-badge {
+            width: 52px; height: 52px; background: linear-gradient(135deg, #8b5cf6, #06b6d4); border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; font-family: var(--font-heading);
+            font-size: 1.8rem; font-weight: 900; color: #fff; box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+        }
+        .q-meta { flex-grow: 1; }
+        .q-meta h3 { font-family: var(--font-heading); font-size: 1.25rem; margin-bottom: 2px; }
+        .q-category {
+            font-size: 0.78rem; color: #06b6d4; background: rgba(6, 182, 212, 0.15);
+            padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(6, 182, 212, 0.2); display: inline-block;
+        }
+
+        .q-body { display: flex; flex-direction: column; gap: 20px; margin-bottom: 25px; }
+        .q-text { font-size: 1.3rem; font-weight: 500; color: #fff; line-height: 1.6; text-align: center; }
+
+        .btn-read-aloud {
+            background: rgba(6, 182, 212, 0.1); color: #22d3ee; border: 1px dashed rgba(6, 182, 212, 0.4);
+            padding: 10px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.9rem; transition: all 0.2s ease; width: 100%;
+        }
+        .btn-read-aloud:hover { background: rgba(6, 182, 212, 0.2); }
+
+        /* Host Screen Buzz control */
+        .buzz-control-panel {
+            background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 15px; border-radius: 10px; text-align: center;
+        }
+        .buzz-waiting { display: flex; align-items: center; justify-content: center; gap: 10px; color: #06b6d4; font-weight: 600; flex-direction: row-reverse; }
+        .buzz-result-card { display: flex; flex-direction: column; gap: 12px; }
+        .winner-tag { font-size: 1.15rem; font-weight: bold; color: #fff; }
+        .player-answer-block {
+            background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px;
+        }
+        .player-answer-block .label { font-size: 0.75rem; color: #94a3b8; }
+        .player-answer-block .answer-text { font-size: 1.25rem; font-weight: 700; }
+
+        /* Player Buzzer button */
+        .buzzer-container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .buzzer-btn {
+            width: 160px; height: 160px; border-radius: 50%;
+            background: radial-gradient(circle, #f43f5e, #be123c); color: #fff;
+            font-family: var(--font-heading); font-weight: 900; font-size: 1.5rem;
+            border: 6px solid rgba(255, 255, 255, 0.2); cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 35px rgba(244, 63, 94, 0.65);
+            animation: buzzer-pulsate-g 2s infinite alternate;
+        }
+        @keyframes buzzer-pulsate-g {
+          0% { box-shadow: 0 0 20px rgba(244, 63, 94, 0.5); }
+          100% { box-shadow: 0 0 45px rgba(244, 63, 94, 0.85); transform: scale(1.03); }
+        }
+        .buzzer-btn:hover { transform: scale(1.05); box-shadow: 0 0 50px rgba(244, 63, 94, 0.9); }
+        .buzzer-btn:active { transform: scale(0.92); box-shadow: 0 0 10px rgba(244, 63, 94, 0.4); }
+        .buzzer-btn.buzzed { background: #4b5563; border-color: #6b7280; cursor: not-allowed; box-shadow: none; animation: none; transform: none; }
+
+        /* Answer Entry for Player */
+        .answer-entry-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .badge-win {
+            background: rgba(251, 191, 36, 0.15); color: #fbbf24; padding: 4px 12px;
+            border-radius: 12px; border: 1px solid rgba(251, 191, 36, 0.3); font-size: 0.85rem; font-weight: bold;
+        }
+        .input-group-answer { display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: right; }
+        .input-group-answer label { font-size: 0.85rem; color: #94a3b8; }
+        .input-group-answer input {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(6, 182, 212, 0.3);
+            color: #fff; padding: 12px 16px; border-radius: 10px; font-size: 1.2rem;
+            outline: none; text-align: center; transition: all 0.2s ease;
+        }
+        .input-group-answer input:focus { border-color: #06b6d4; box-shadow: 0 0 15px rgba(6, 182, 212, 0.35); }
+        .submitted-status {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;
+        }
+
+        /* Player Spectator Mode card */
+        .spectator-card {
+            background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 12px; padding: 20px; margin-top: 10px;
+        }
+        .spectator-card p { font-size: 1.1rem; color: #fff; margin-bottom: 5px; }
+        .spectator-card p.sub { font-size: 0.8rem; color: #64748b; }
+        .other-player-submitted {
+            margin-top: 15px; padding: 10px; background: rgba(6, 182, 212, 0.08);
+            border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 8px; font-size: 1.1rem;
+        }
+
+        .answer-reveal {
+            background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px; padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+        }
+        .ans-label { font-size: 0.78rem; color: #94a3b8; }
+        .ans-val { font-size: 1.4rem; font-weight: bold; color: #10b981; }
+
+        .answer-section { margin-top: 10px; }
+        .modal-footer { display: flex; gap: 12px; flex-wrap: wrap; }
+        .btn-action-claim {
+            flex: 1; border: none; color: #fff; padding: 12px 18px; border-radius: 10px;
+            font-family: var(--font-heading); font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease; min-width: 140px;
+        }
+        .btn-action-claim.red { background: #ef4444; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25); }
+        .btn-action-claim.red:hover { background: #dc2626; }
+        .btn-action-claim.green { background: #10b981; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); }
+        .btn-action-claim.green:hover { background: #059669; }
+        .btn-action-claim.block-btn { background: #475569; }
+        .btn-action-claim.block-btn:hover { background: #334155; }
+
+        /* Helpers */
+        .hidden { display: none !important; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .animate-scale-up { animation: scaleUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+        @keyframes fadeIn { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes scaleUp { 0% { opacity: 0; transform: scale(0.92); } 100% { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body>
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    <div class="confetti-container" id="confetti-container"></div>
+
+    <!-- HEADER -->
+    <header class="game-header">
+        <div class="header-logo">
+            <span style="font-size: 1.5rem;">✨</span>
+            <h1>حروف مع عمر</h1>
+            <span class="logo-badge">بث تزامني مباشر</span>
+        </div>
+        <div class="header-actions">
+            <button id="toggle-sound-btn" class="btn-text-icon active">الأصوات: مفعلة</button>
+            <button id="toggle-tts-btn" class="btn-text-icon active">كلام عمر: مفعل</button>
+            <button id="leave-room-btn" class="btn-secondary hidden">مغادرة اللعبة ↩</button>
+        </div>
+    </header>
+
+    <!-- --- LOBBY CHOOSE ROLE VIEW --- -->
+    <main class="lobby-selection-view" id="lobby-view">
+        <div class="menu-hero">
+            <h2>مرحباً بكم في لعبة حروف التفاعلية 🏆</h2>
+            <p>انضم فوراً إلى فريقك بنقرة زر واحدة أو افتح شاشة الموجه لعرض اللوحة الكبيرة!</p>
+        </div>
+
+        <div class="lobby-cards-grid">
+            <!-- Player Joining Card -->
+            <div class="lobby-card border-cyan bg-gradient-to-br from-slate-900/80 to-purple-950/40">
+                <div class="card-header">
+                    <span>📱</span>
+                    <h3>شاشة الهاتف (لاعب بالفريق)</h3>
+                </div>
+                <p>اكتب اسمك أدناه ثم اختر الفريق الذي تود الانضمام له مباشرة:</p>
+
+                <div class="card-inputs">
+                    <div class="input-item">
+                        <label>اسمك المستعار للعبة:</label>
+                        <input type="text" id="player-name-input" placeholder="مثال: محمد، أحمد..." style="text-align: center; font-size: 1.15rem;" />
+                    </div>
+                </div>
+
+                <div class="input-item-row" style="margin-top: 10px;">
+                    <button class="btn-primary-neon font-black text-xl" style="background: linear-gradient(135deg, #f43f5e, #be123c); box-shadow: 0 0 20px rgba(244, 63, 94, 0.45);" onclick="playerJoinTeam('red')">انضم للأحمر 🔴</button>
+                    <button class="btn-primary-neon font-black text-xl" style="background: linear-gradient(135deg, #10b981, #047857); box-shadow: 0 0 20px rgba(16, 185, 129, 0.45);" onclick="playerJoinTeam('green')">انضم للأخضر 🟢</button>
+                </div>
+                <div style="text-align: center; font-size: 0.75rem; color: #64748b; margin-top: 5px;">
+                    * سيتم ربط هاتفك تلقائياً بشاشة العرض الكبيرة دون الحاجة لأي كلمات مرور.
+                </div>
+            </div>
+
+            <!-- Host Configuration Card -->
+            <div class="lobby-card border-violet">
+                <div class="card-header">
+                    <span>📺</span>
+                    <h3>شاشة الموجه / التلفاز الكبيرة</h3>
+                </div>
+                <p>افتح هذه شاشة من جهاز الكمبيوتر أو اعرضها على التلفاز للتحكم باللوحة السداسية.</p>
+                
+                <div class="card-inputs">
+                    <div class="input-item-row">
+                        <div class="input-item">
+                            <label>الأسئلة:</label>
+                            <select id="host-game-type">
+                                <option value="general">النمط العام (ثقافة وعمق)</option>
+                                <option value="islamic">النمط الإسلامي بالكامل</option>
+                            </select>
+                        </div>
+                        <div class="input-item">
+                            <label>الصعوبة:</label>
+                            <select id="host-difficulty">
+                                <option value="easy">سهل</option>
+                                <option value="medium" selected>متوسط</option>
+                                <option value="hard">صعب</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-item-row">
+                        <div class="input-item">
+                            <label>أبعاد الشبكة:</label>
+                            <select id="host-grid-size">
+                                <option value="4">4 × 4</option>
+                                <option value="5" selected>5 × 5</option>
+                                <option value="6">6 × 6</option>
+                            </select>
+                        </div>
+                        <div class="input-item">
+                            <label>اسم الفريق الأحمر:</label>
+                            <input type="text" id="host-red-name" value="الفريق الأحمر" />
+                        </div>
+                    </div>
+                    <div class="input-item">
+                        <label>اسم الفريق الأخضر:</label>
+                        <input type="text" id="host-green-name" value="الفريق الأخضر" />
+                    </div>
+                </div>
+
+                <button class="btn-primary-neon bg-violet w-full text-lg mt-3" onclick="hostCreateRoom()">فتح لوحة العرض الرئيسية</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- --- WAITING LOBBY (PLAYERS LOADING) --- -->
+    <main class="waiting-lobby hidden" id="waiting-lobby">
+        <div class="loading-card animate-pulse">
+            <span style="font-size: 3rem;">📡</span>
+            <h3>جاري ربط جهازك بالفريق المختار تلقائياً...</h3>
+            <p>يرجى إبقاء هذه الصفحة مفتوحة والتأكد من تشغيل شاشة الموجه.</p>
+        </div>
+    </main>
+
+    <!-- GAMEPLAY VIEW -->
+    <main class="game-view hidden" id="game-view">
+        <!-- PANEL LEFT -->
+        <section class="side-panel">
+            <div class="score-card">
+                <div class="team-score red">
+                    <div class="team-marker">↔</div>
+                    <div class="score-name" id="score-red-name">الفريق الأحمر</div>
+                    <div class="score-val" id="score-red-val">0</div>
+                </div>
+                <div class="score-divider">VS</div>
+                <div class="team-score green">
+                    <div class="team-marker">↕</div>
+                    <div class="score-name" id="score-green-name">الفريق الأخضر</div>
+                    <div class="score-val" id="score-green-val">0</div>
+                </div>
+            </div>
+
+            <div class="turn-banner red" id="turn-banner">دور الفريق الأحمر الآن</div>
+
+            <div class="aziz-interactive-card">
+                <div class="aziz-bubble-live">
+                    <p id="aziz-speech-bubble">جاري التجهيز للتحدي...</p>
+                    <span class="bubble-arrow"></span>
+                </div>
+                
+                <div class="aziz-face idle" id="live-aziz-face">
+                    <div class="aziz-eyes">
+                        <div class="aziz-eye"><div class="pupil"></div></div>
+                        <div class="aziz-eye"><div class="pupil"></div></div>
+                    </div>
+                    <div class="aziz-mouth"></div>
+                </div>
+                <div class="aziz-name">الموجه عمر</div>
+            </div>
+
+            <!-- Connected players list -->
+            <div class="soundboard-card">
+                <h4 id="players-list-title">اللاعبون المتصلون (0) 👥</h4>
+                <div class="players-list-scroll" id="connected-players-list">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+
+            <div class="soundboard-card" id="soundboard-card-container">
+                <h4>لوحة أصوات الموجه 🎧</h4>
+                <div class="sound-buttons">
+                    <button class="sound-btn" onclick="triggerSound('correct')">🔔 صح</button>
+                    <button class="sound-btn" onclick="triggerSound('wrong')">🚨 خطأ</button>
+                    <button class="sound-btn" onclick="triggerSound('applause')">👏 تصفيق</button>
+                    <button class="sound-btn" onclick="triggerSound('victory')">🎺 فوز</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- PANEL CENTER: Honeycomb Grid -->
+        <section class="grid-panel">
+            <!-- Host View boundaries -->
+            <div class="grid-boundaries" id="host-view-boundaries">
+                <div class="arrow-indicator top-green" id="boundary-top-label">↓ الأخضر (أعلى إلى أسفل) ↓</div>
+                
+                <div class="grid-center-container">
+                    <div class="arrow-indicator left-red" id="boundary-left-label">→ الأحمر (يمين إلى أسفل) →</div>
+
+                    <div class="svg-wrapper" id="svg-wrapper">
+                        <!-- Hexagon Grid SVG will be injected here -->
+                    </div>
+
+                    <div class="arrow-indicator right-red" id="boundary-right-label">→ الأحمر (يمين إلى أسفل) →</div>
+                </div>
+
+                <div class="arrow-indicator bottom-green" id="boundary-bottom-label">↓ الأخضر (أعلى إلى أسفل) ↓</div>
+            </div>
+
+            <!-- Winner announcement overlay -->
+            <div class="winner-announcement hidden" id="winner-banner">
+                <div class="winner-crown">👑</div>
+                <h2 id="winner-text">الفائز بالتحدي: الفريق الأحمر!</h2>
+                <p>تم توصيل الخط بنجاح وتفوق المعرفة الباهر!</p>
+                <button class="btn-primary-neon bg-violet" id="restart-game-btn" onclick="resetCurrentGame()">لعب جولة جديدة</button>
+            </div>
+        </section>
+
+        <!-- PANEL RIGHT -->
+        <section class="side-panel">
+            <div class="logs-card">
+                <h4>سجل أحداث الجولة 📝</h4>
+                <div class="logs-content" id="logs-content">
+                    <!-- Logs injected here -->
+                </div>
+            </div>
+
+            <div class="rules-card">
+                <h4>معلومات البث ℹ️</h4>
+                <div class="rules-content" id="connection-rules-content">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+
+            <div style="margin-top: auto;" id="host-reset-area">
+                <button class="btn-danger" onclick="resetCurrentGame()">إعادة تعيين اللوحة 🔄</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- QUESTION MODAL DIALOG (HOST VIEW) -->
+    <div class="modal-backdrop hidden" id="question-modal">
+        <div class="modal-content animate-scale-up">
+            <button class="modal-close" onclick="closeModal()">✕</button>
+            
+            <div class="modal-header-q">
+                <div class="q-letter-badge" id="modal-letter">أ</div>
+                <div class="q-meta">
+                    <h3 id="modal-letter-title">حرف أ</h3>
+                    <span class="q-category" id="modal-category">ثقافة عامة</span>
+                </div>
+            </div>
+
+            <div class="q-body">
+                <p class="q-text" id="modal-question-text">السؤال هنا؟</p>
+                
+                <button class="btn-read-aloud" id="read-aloud-btn" onclick="readQuestionAloud()">🔊 قراءة السؤال بصوت عمر</button>
+
+                <!-- Buzz Panel -->
+                <div class="buzz-control-panel">
+                    <div class="buzz-waiting" id="buzz-waiting-panel">
+                        <span>📡 في انتظار ضغط اللاعبين على الجرس في جوالاتهم...</span>
+                    </div>
+                    <div class="buzz-result-card hidden" id="buzz-result-panel">
+                        <div class="winner-tag">🎯 المتسابق الأسرع: <span id="buzz-winner-name-lbl" style="color:#fbbf24;">---</span></div>
+                        <div class="player-answer-block">
+                          <span class="label">الإجابة المستلمة إلكترونياً:</span>
+                          <div class="answer-text">
+                            <span id="submitted-answer-lbl" style="color:#34d399;">جاري كتابة الإجابة...</span>
+                          </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Answer reveal -->
+                <div class="answer-section" id="answer-reveal-area">
+                    <button class="btn-secondary w-full" id="show-answer-btn" onclick="revealAnswer()">👁️ كشف الإجابة النموذجية للموجه</button>
+                    <div class="answer-reveal hidden animate-fade-in" id="answer-text-reveal">
+                        <span class="ans-label">الإجابة النموذجية:</span>
+                        <span class="ans-val" id="model-answer-val">آدم</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer Action buttons -->
+            <div class="modal-footer" id="modal-footer-actions">
+                <!-- Injected via JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- PLAYER DEVICE ACTIVE SCREEN MODAL (BUZZER / ANSWER FORM) -->
+    <div class="modal-backdrop hidden" id="player-active-modal">
+        <div class="modal-content animate-scale-up" style="text-align: center;">
+            
+            <!-- Step 1: Buzzer button screen -->
+            <div class="buzzer-container" id="player-buzzer-screen">
+                <h3 id="player-buzzer-header">حرف أ | إسلاميات</h3>
+                <p>السؤال مغطى! اضغط على الجرس فوراً لتأخذ حق الإجابة وكتابتها!</p>
+                
+                <button class="buzzer-btn" id="player-buzz-btn" onclick="playerPressBuzzer()">اضغط الآن! 🔴</button>
+                
+                <p class="tip-text">أسرع فريق يضغط هو من يحصل على السؤال!</p>
+            </div>
+
+            <!-- Step 2: Answer Input form screen -->
+            <div class="answer-entry-container hidden" id="player-answer-entry-screen">
+                <div class="badge-win">🎯 أنت الفائز بالجرس! السؤال لك:</div>
+                <h3 id="player-question-txt" style="color:#22d3ee; margin: 15px 0;">السؤال هنا؟</h3>
+                
+                <div class="input-group-answer">
+                    <label>اكتب إجابتك النموذجية بدقة:</label>
+                    <input type="text" id="player-typed-answer-input" placeholder="اكتب الإجابة هنا..." />
+                    
+                    <button class="btn-primary-neon bg-cyan w-full" id="player-submit-ans-btn" style="margin-top:12px;" onclick="playerSubmitAnswer()">إرسال الإجابة للموجه عمر</button>
+                    
+                    <div class="submitted-status hidden" id="player-answer-submitted-badge">
+                        <span style="color:#34d399;">✓ تم إرسال إجابتك للموجه عمر</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Other team buzzed / Spectating screen -->
+            <div class="spectator-container hidden" id="player-spectator-screen">
+                <h3 id="player-spectator-header">حرف أ | إسلاميات</h3>
+                <div class="spectator-card animate-pulse">
+                    <p>تأهل اللاعب <strong id="other-buzz-winner-lbl" style="color:#fbbf24;">---</strong> من الفريق الآخر للإجابة!</p>
+                    <p class="sub">بانتظار كتابة إجابته ومراجعتها من الموجه عمر...</p>
+                    <div class="other-player-submitted hidden" id="other-submitted-ans-box">
+                        كتب اللاعب: <strong id="other-submitted-ans-lbl" style="color:#22d3ee;">---</strong>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- --- JAVASCRIPT GAME ENGINE --- -->
+    <script>
+        // --- QUESTIONS DATABASE ---
+        const QUESTIONS_DATABASE = {
+  "أ": [
+    { id: "a1", letter: "أ", question: "ما هي التسمية القرآنية التي تطلق على سلالة يعقوب عليه السلام وأولاده الاثني عشر؟", answer: "الأسباط", category: "إسلاميات", difficulty: "hard", type: "islamic" },
+    { id: "a2", letter: "أ", question: "ما هو المفهوم الفلسفي والسياسي الذي يعبر عن غياب الدولة أو السلطة المركزية الحاكمة؟", answer: "الأناركية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "a3", letter: "أ", question: "ثاني عاصمة للدولة العثمانية بعد بورصة وقبل فتح القسطنطينية؟", answer: "أدرنة", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "a4", letter: "أ", question: "هرمون يفرزه الجسم كرد فعل لمواجهة الخطر أو القتال ويعمل على زيادة ضربات القلب والضغط؟", answer: "الأدرينالين", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "a5", letter: "أ", question: "الفيلسوف اليوناني العظيم صاحب كتاب الأخلاق إلى نيقوماخوس وتلميذ أفلاطون؟", answer: "أرسطو", category: "ثقافة عامة", difficulty: "medium", type: "general" }
+  ],
+  "ب": [
+    { id: "b1", letter: "ب", question: "مذهب فلسفي يرى أن اللذة والمنفعة الشخصية والعملية هي المقياس الأساسي للقيم والحقائق؟", answer: "البراغماتية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "b2", letter: "ب", question: "ما هو اللقب التاريخي الذي أطلق على معركة بلاط الشهداء في المراجع الغربية؟", answer: "بواتييه", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "b3", letter: "ب", question: "كتاب تاريخي ضخم ومشهور ألفه الحافظ ابن كثير يبدأ من بدء الخلق وينتهي بالفتن والملاحم؟", answer: "البداية والنهاية", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "b4", letter: "ب", question: "اسم المضيق المائي الشهير الذي يفصل بين قارة آسيا وقارة أمريكا الشمالية؟", answer: "بيرنغ", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "b5", letter: "ب", question: "غزوة كبرى انتصر فيها المسلمون وتسمى في القرآن الكريم ب 'يوم الفرقان'؟", answer: "بدر", category: "إسلاميات", difficulty: "easy", type: "islamic" }
+  ],
+  "ت": [
+    { id: "t1", letter: "ت", question: "مفهوم شرعي يعني طلب العفو وإرجاع الحقوق المالية أو المعنوية للغير بنية التوبة؟", answer: "التحلل", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "t2", letter: "ت", question: "الطبقة الجوية الملاصقة للأرض والتي تحدث فيها كافة الظواهر المناخية والتقلبات؟", answer: "التروبوسفير", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "t3", letter: "ت", question: "ما هو الاسم الشائع لأقدم وأعظم تفسير أثري جامع للقرآن الكريم، ألفه ابن جرير؟", answer: "تفسير الطبري", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "t4", letter: "ت", question: "الفترات التاريخية التي تفككت فيها الدولة الأموية بالأندلس إلى دويلات متناحرة؟", answer: "ملوك الطوائف", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "t5", letter: "ت", question: "الاسم الأصولي الذي يقصد به قراءة القرآن بطمأنينة وتؤدة وتدبر حروفه ومعانيه؟", answer: "الترتيل", category: "إسلاميات", difficulty: "medium", type: "islamic" }
+  ],
+  "ث": [
+    { id: "th1", letter: "ث", question: "المرأة التي سبق لها الزواج في الفقه الإسلامي وتتميز بأحكام خاصة في النكاح؟", answer: "الثيب", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "th2", letter: "ث", question: "الغاز المسؤول عن عملية البناء الضوئي في النباتات وتغير المناخ والاحتباس الحراري؟", answer: "ثاني أكسيد الكربون", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "th3", letter: "ث", question: "نظام الحكم الذي يستمد فيه الحاكم سلطته ودستوره من الدين والقوانين الإلهية مباشرة؟", answer: "الثيوقراطية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "th4", letter: "ث", question: "من هي الصحابية الجليلة الملقبة بـ 'ذات النطاقين' وابنة الصديق وأخت عائشة؟", answer: "أسماء بنت أبي بكر", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "th5", letter: "ث", question: "مدينة أندلسية أطلق عليها تاريخياً 'ثغر الأندلس' وكانت عاصمة الفضة وعقدة عسكرية؟", answer: "سرقسطة", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ج": [
+    { id: "j1", letter: "ج", question: "العقوبات والحدود المقررة شرعاً لحفظ الدماء والأعراض والأموال في الفقه الإسلامي؟", answer: "الجنايات", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "j2", letter: "ج", question: "دولة أوروبية تقع في البلقان كانت جزءاً من يوغوسلافيا وعاصمتها بودغوريتسا؟", answer: "الجبل الأسود", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "j3", letter: "ج", question: "العلم الذي يدرس التضاريس والظواهر الطبيعية على سطح الأرض ونشأتها وتطورها؟", answer: "الجيومورفولوجيا", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "j4", letter: "ج", question: "القائد والفقيه المالكي البطل الذي فتح صقلية بأسطول بحري وأسس إمارتها؟", answer: "أسد بن الفرات", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "j5", letter: "ج", question: "المنهج الفلسفي القائم على حوار وتعارض الأفكار وتطورها للوصول للحقائق المطلقة؟", answer: "الجدلية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ح": [
+    { id: "h1", letter: "ح", question: "صلح شهير وقع في السنة السادسة للهجرة بين المسلمين وقريش وكان فتحاً مبيناً؟", answer: "الحديبية", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "h2", letter: "ح", question: "معركة تاريخية انتصر فيها المسلمون بقيادة صلاح الدين وحرروا القدس عام 583هـ؟", answer: "حطين", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "h3", letter: "ح", question: "مادة كيميائية تسمى تاريخياً زيت الزاج وتعتبر أساس الصناعات الكيميائية والبطاريات؟", answer: "حمض الكبريتيك", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "h4", letter: "ح", question: "اللقب التكريمي العلمي الذي أطلق على عبد الله بن عباس لعلمه العزير بالتفسير؟", answer: "حبر الأمة", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "h5", letter: "ح", question: "المذهب الفلسفي الذي يقول إن كل الأحداث والخيارات تحددها مسبقاً أسباب وقوانين الطبيعة؟", answer: "الحتمية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "خ": [
+    { id: "kh1", letter: "خ", question: "غزوة قادها الرسول صلى الله عليه وسلم لفتح حصون اليهود المنيعة خارج المدينة؟", answer: "خيبر", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "kh2", letter: "خ", question: "الخلايا القادرة على الانقسام والتمايز إلى أنواع مختلفة من الخلايا المتخصصة في الطب؟", answer: "الخلايا الجذعية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "kh3", letter: "خ", question: "الصحابي الجليل البطل الذي لم يهزم في معركة قط في الجاهلية أو الإسلام؟", answer: "خالد بن الوليد", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "kh4", letter: "خ", question: "الصحابي البطل الذي جعل الرسول شهادته بشهادتين في التوثيق والبيع؟", answer: "خزيمة بن ثابت", category: "إسلاميات", difficulty: "hard", type: "islamic" },
+    { id: "kh5", letter: "خ", question: "فن إسلامي أصيل يعتمد على رسم وتشكيل الحروف العربية بجماليات هندسية مذهلة؟", answer: "الخط العربي", category: "ثقافة عامة", difficulty: "easy", type: "general" }
+  ],
+  "د": [
+    { id: "d1", letter: "د", question: "من هو النبي الملك الذي أوتي المزامير وجمال الصوت وألان الله له الحديد؟", answer: "داود", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "d2", letter: "د", question: "دولة تقع في جزيرة هيسبانيولا في البحر الكاريبي وعاصمتها سانتو دومينغو؟", answer: "الدومينيكان", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "d3", letter: "د", question: "فرع الفيزياء الذي يعنى بدراسة الحرارة والطاقة والشغل الميكانيكي وعلاقتهم؟", answer: "الديناميكا الحرارية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "d4", letter: "د", question: "العلم الإحصائي الذي يدرس تطور ونمو المجتمعات البشرية ومعدلات المواليد والوفيات؟", answer: "الديموغرافيا", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "d5", letter: "د", question: "الفيلسوف الفرنسي الشهير رائد الشك المنهجي وصاحب عبارة 'أنا أفكر إذن أنا موجود'؟", answer: "ديكارت", category: "ثقافة عامة", difficulty: "medium", type: "general" }
+  ],
+  "ذ": [
+    { id: "dh1", letter: "ذ", question: "ما هو اللقب الشرعي لعثمان بن عفان لزواجه من ابنتي الرسول صلى الله عليه وسلم؟", answer: "ذو النورين", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "dh2", letter: "ذ", question: "أصغر وحدة بنائية للمادة تحتفظ بالخواص الكيميائية للعنصر وتتكون من نواة وإلكترونات؟", answer: "الذرة", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "dh3", letter: "ذ", question: "سورة في القرآن الكريم تبدأ بقسم الرياح التي تذرو التراب ذروًا؟", answer: "الذاريات", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "dh4", letter: "ذ", question: "نبي من بني إسرائيل ذكره الله في القرآن الكريم ووصفه بالصبر ودخل الجنة؟", answer: "ذو الكفل", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "dh5", letter: "ذ", question: "الوظيفة الدماغية المسؤولة عن حفظ واسترجاع المعلومات والخبرات السابقة للإنسان؟", answer: "الذاكرة", category: "ثقافة عامة", difficulty: "easy", type: "general" }
+  ],
+  "ر": [
+    { id: "r1", letter: "ر", question: "المرض المناعي المزمن الذي يصيب المفاصل والأنسجة الضامة مسبباً آلاماً حادة؟", answer: "الروماتيزم", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "r2", letter: "ر", question: "مفهوم سياسي وفكري يعبر عن السعي لإحداث تغيير جذري وشامل في البنية السياسية؟", answer: "الراديكالية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "r3", letter: "ر", question: "الركن الثاني من أركان الإيمان وهو الإيمان بكتب الله ورسله؟", answer: "الرسل", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "r4", letter: "ر", question: "ابنة النبي صلى الله عليه وسلم التي هاجرت للحبشة والمدينة وزوجة الخليفة عثمان؟", answer: "رقية", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "r5", letter: "ر", question: "مدرسة فلسفية يونانية تدعو لضبط النفس والعيش وفقاً للعقل وتحمل الصعاب بوقار؟", answer: "الرواقية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ز": [
+    { id: "z1", letter: "ز", question: "من هو النبي الذي تولى كفالة مريم البتول ودعا ربه فوهبه يحيى عليه السلام?؟", answer: "زكريا", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "z2", letter: "ز", question: "كوكب غازي عملاق يمتلك نظام حلقات غازية وجليدية مذهلة ويدور حول الشمس؟", answer: "زحل", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "z3", letter: "ز", question: "ما هو الاسم الكيميائي للعنصر ذي العدد الذري 30 والرمز الكيميائي Zn؟", answer: "الزنك", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "z4", letter: "ز", question: "أم المؤمنين وزوجة الرسول الملقبة بـ 'أم المساكين' لكثرة إنفاقها وصدقتها؟", answer: "زينب بنت خزيمة", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "z5", letter: "ز", question: "العلم الأكاديمي المختص بدراسة الحيوانات وهيكليتها وتصنيفها وسلوكياتها؟", answer: "الزولوجيا", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "س": [
+    { id: "s1", letter: "س", question: "سورة قرآنية يستحب قراءتها فجر كل جمعة مع سورة الإنسان؟", answer: "السجدة", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "s2", letter: "س", question: "المركب العضوي المعقد الذي يشكل الدعامة الأساسية لجدران الخلايا النباتية؟", answer: "السليلوز", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "s3", letter: "س", question: "دولة في وسط أوروبا تقع في جبال الألب وعاصمتها لوبليانا؟", answer: "سلوفينيا", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "s4", letter: "س", question: "نبي الله سخر الله له الريح والجن والحيوانات وعلمه منطق الطير؟", answer: "سليمان", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "s5", letter: "س", question: "عاشر سلاطين العثمانيين وأعظمهم حكماً وتوسعاً وواضع القوانين المدنية؟", answer: "سليمان القانوني", category: "ثقافة عامة", difficulty: "medium", type: "general" }
+  ],
+  "ش": [
+    { id: "sh1", letter: "ش", question: "النبي الذي أرسل إلى أصحاب الأيكة وكان خطيب الأنبياء عليهم السلام؟", answer: "شعيب", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "sh2", letter: "ش", question: "اللفظ الأصولي الذي يطلق على المشرع سبحانه وتعالى في الأحكام الفقهية؟", answer: "الشارع", category: "إسلاميات", difficulty: "hard", type: "islamic" },
+    { id: "sh3", letter: "ش", question: "أكبر مدينة صينية من حيث عدد السكان وتعتبر المركز المالي والتجاري للبلاد؟", answer: "شنغهاي", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "sh4", letter: "ش", question: "المرأة التي حكمت مصر في نهاية العصر الأيوبي وبداية دولة المماليك لـ 80 يوماً؟", answer: "شجرة الدر", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "sh5", letter: "ش", question: "مذهب اجتماعي واقتصادي راديكالي يهدف لإقامة مجتمع بلا طبقات وبلا ملكية خاصة؟", answer: "الشيوعية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ص": [
+    { id: "s_1", letter: "ص", question: "ما هو الجسيم الممدود فوق جهنم يعبره الناس يوم القيامة حسب أعمالهم؟", answer: "الصراط", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "s_2", letter: "ص", question: "الموجة الميكانيكية الطولية التي تحتاج لوسط مادي لانتقالها ولا تنتقل في الفراغ؟", answer: "الصوت", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "s_3", letter: "ص", question: "حركة سياسية استعمارية وتوسعية تسعى لإقامة وطن قومي لليهود في فلسطين؟", answer: "الصهيونية", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "s_4", letter: "ص", question: "الصلح التاريخي الذي تنازل فيه الحسن بن علي عن الخلافة لمعاوية لحقن الدماء؟", answer: "صلح الحسن", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "s_5", letter: "ص", question: "المنهج والتربية الإسلامية التي تعنى بالزهد وتزكية النفس والاهتمام بالجانب الروحي؟", answer: "الصوفية", category: "إسلاميات", difficulty: "medium", type: "islamic" }
+  ],
+  "ض": [
+    { id: "d_1", letter: "ض", question: "ما هي الصلاة النافلة التي تؤدى بعد شروق الشمس بمقدار رمح وحتى قبيل الظهر؟", answer: "الضحى", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "d_2", letter: "ض", question: "المصطلح الفيزيائي الذي يعبر عن القوة المؤثرة عمودياً على وحدة المساحات؟", answer: "الضغط", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "d_3", letter: "ض", question: "التقلص أو التراجع في حجم خلية أو نسيج أو عضو نتيجة قلة الاستخدام أو المرض؟", answer: "الضمور", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "d_4", letter: "ض", question: "المفهوم الفقهي الذي يلزم الشخص بتعويض مادي أو معنوي عن الضرر الذي ألحقه بالغير؟", answer: "الضمان", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "d_5", letter: "ض", question: "ظاهرة بيئية ملوثة ناتجة عن امتزاج الدخان والملوثات بالضباب الطبيعي في المدن؟", answer: "الضباب الدخاني", category: "ثقافة عامة", difficulty: "medium", type: "general" }
+  ],
+  "ط": [
+    { id: "t_1", letter: "ط", question: "ما هو الجبل المبارك الذي كلم الله عليه موسى تكليماً في سيناء؟", answer: "الطور", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "t_2", letter: "ط", question: "الطاقة التي يمتلكها الجسم بسبب حركته وتعتمد على كتلته ومربع سرعته؟", answer: "الطاقة الحركية", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "t_3", letter: "ط", question: "العلم الذي يدرس التمثيل البياني الدقيق للتضاريس الطبيعية والاصطناعية لمنطقة ما؟", answer: "الطبوغرافيا", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "t_4", letter: "ط", question: "القائد البطل الذي فتح الأندلس وعبر البحر بجيشه وألقى خطبته الشهيرة؟", answer: "طارق بن زياد", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "t_5", letter: "ط", question: "الفيلسوف اليوناني الذي يعتبر تاريخياً أول فيلسوف وقرر أن الماء أصل الحياة؟", answer: "طاليس", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ظ": [
+    { id: "z_1", letter: "ظ", question: "ما هو اللفظ القرآني الذي يعبر عن غياب النور تماماً وورد مجموعاً في 'في ظلمات ثلاث'؟", answer: "الظلمات", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "z_2", letter: "ظ", question: "الظاهرة البصرية التي تنشأ عندما يعترض جسم معتم مسار الأشعة الضوئية؟", answer: "الظل", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "z_3", letter: "ظ", question: "المفهوم الأصولي الذي يعبر عن التخمين أو الترجيح غير اليقيني في الأحكام الفقهية؟", answer: "الظن", category: "إسلاميات", difficulty: "hard", type: "islamic" },
+    { id: "z_4", letter: "ظ", question: "المفهوم الفقهي الذي يحرم فيه الزوج زوجته عليه بتشبيهها بظهر أمه؟", answer: "الظهار", category: "إسلاميات", difficulty: "hard", type: "islamic" },
+    { id: "z_5", letter: "ظ", question: "المذهب الفلسفي الذي يرى أن الزمان والمكان لا وجود حقيقي لهما خارج نطاق العلاقة والظرف؟", answer: "الظرفية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ع": [
+    { id: "e1", letter: "ع", question: "الخليفة الراشد الثاني وصاحب الفتوحات العظمى والملقب بالفاروق؟", answer: "عمر بن الخطاب", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "e2", letter: "ع", question: "العلم المنهجي الذي يدرس المجتمع والسلوك الاجتماعي الإنساني وأسسه ابن خلدون؟", answer: "علم الاجتماع", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "e3", letter: "ع", question: "العاصمة العربية التي بنيت تاريخياً على سبعة جبال وتعود لعهد العمونيين؟", answer: "عمان", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "e4", letter: "ع", question: "الدولة الإسلامية التي خلفت الأمويين ودامت لخمسة قرون وكانت بغداد عاصمتها الذهبية؟", answer: "العباسية", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "e5", letter: "ع", question: "العلم التاريخي الذي يختص بدراسة النقود وتطور العملات الورقية والمعدنية وتاريخها؟", answer: "علم النميات", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "غ": [
+    { id: "g1", letter: "غ", question: "الغار الذي لجأ إليه الرسول صلى الله عليه وسلم وأبو بكر الصديق أثناء الهجرة المباركة؟", answer: "غار ثور", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "g2", letter: "غ", question: "المنطقة المحيطة بالأرض والتي تحميها من الرياح الشمسية الضارة بواسطة الحقل المغناطيسي؟", answer: "الغلاف المغناطيسي", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "g3", letter: "غ", question: "مجموعة الغدد التي تفرز الهرمونات مباشرة في مجرى الدم دون الحاجة لقنوات ناقلة؟", answer: "الغدد الصماء", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "g4", letter: "غ", question: "الغار الذي كان يتعبد فيه النبي صلى الله عليه وسلم ونزل فيه جبريل بأول آية؟", answer: "غار حراء", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "g5", letter: "غ", question: "المذهب الفلسفي الذي يقرر أن كل شيء في الطبيعة والكون مصمم لهدف أو غاية محددة؟", answer: "الغائية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ف": [
+    { id: "f1", letter: "ف", question: "السورة الافتتاحية للقرآن الكريم وهي أم الكتاب والسبع المثاني؟", answer: "الفاتحة", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "f2", letter: "ف", question: "فرع علم الفلك الذي يطبق قوانين الفيزياء والمسؤول عن دراسة طبيعة الأجرام السماوية؟", answer: "الفيزياء الفلكية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "f3", letter: "ف", question: "الفيلسوف الإنجليزي رائد المنهج التجريبي الحديث ومؤلف كتاب الأورغانون الجديد؟", answer: "فرانسيس بيكون", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "f4", letter: "ف", question: "اللقب المشهور للخليفة الراشد عمر بن الخطاب والذي يعني الفارق بين الحق والباطل؟", answer: "الفاروق", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "f5", letter: "ف", question: "المنهج الفلسفي القائم على دراسة الظواهر والوعي كما تظهر وتختبر مباشرة للبشر؟", answer: "الفينومينولوجيا", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ق": [
+    { id: "q1", letter: "ق", question: "أولى القبلتين وثالث الحرمين الشريفين ومسرى الرسول وتقع في فلسطين؟", answer: "القدس", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "q2", letter: "ق", question: "أحد مصادر التشريع الإسلامي التبعية ويعني إلحاق فرع بأصل في الحكم لعله مشتركة؟", answer: "القياس", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "q3", letter: "ق", question: "عاصمة الإمبراطورية البيزنطية التاريخية التي فتحها السلطان محمد الفاتح عام 1453؟", answer: "القسطنطينية", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "q4", letter: "ق", question: "العلم الذي يعنى بدراسة كيفية نطق وتواتر الآيات القرآنية عن القراء السبعة؟", answer: "القراءات", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "q5", letter: "ق", question: "مبادئ الحركة الثلاثة التي وضعها العالم إسحاق نيوتن وأسست لعلم الميكانيكا الكلاسيكية؟", answer: "قوانين نيوتن", category: "ثقافة عامة", difficulty: "medium", type: "general" }
+  ],
+  "ك": [
+    { id: "k1", letter: "ك", question: "بيت الله الحرام في مكة المكرمة وأول بيت وضع للناس للعبادة؟", answer: "الكعبة", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "k2", letter: "ك", question: "المفهوم الكيميائي الذي يعبر عن مدى قدرة الذرة على جذب إلكترونات الرابطة الكيميائية؟", answer: "الكهروسالبية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "k3", letter: "ك", question: "الفيلسوف وعالم الاجتماع الفرنسي الذي يعتبر مؤسس الفلسفة الوضعية الحديثة؟", answer: "أوغست كونت", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "k4", letter: "ك", question: "سورة في القرآن الكريم تحكي قصة شباب آمنوا بربهم وهربوا لدينهم في كهف؟", answer: "الكهف", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "k5", letter: "ك", question: "المذهب الفكري الصيني القديم القائم على الطاعة الأسرية والاجتماعية وحكم الأخلاق؟", answer: "الكونفوشيوسية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ل": [
+    { id: "l1", letter: "ل", question: "اللوح الذي كتبت فيه مقادير الخلائق كلها قبل خلق السماوات والأرض؟", answer: "اللوح المحفوظ", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "l2", letter: "ل", question: "الأوعية والأعضاء التي تشكل جزءاً من جهاز المناعة وتعمل على تصفية السوائل في الجسم؟", answer: "الليمفاوية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "l3", letter: "ل", question: "الفلسفة السياسية والاقتصادية التي تقوم على مبادئ الحرية الفردية وحكم القانون؟", answer: "الليبرالية", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "l4", letter: "ل", question: "ليلة في شهر رمضان المبارك تنزل فيها الملائكة وهي خير من ألف شهر؟", answer: "ليلة القدر", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "l5", letter: "ل", question: "العلم الأكاديمي الذي يدرس بنية اللغة وقوانينها وتطور اللهجات بشكل علمي وبنيوي؟", answer: "اللسانيات", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "م": [
+    { id: "m1", letter: "م", question: "خاتم الأنبياء والمرسلين والرحمة المهداة للعالمين؟", answer: "محمد", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "m2", letter: "م", question: "من هو النبي الذي كلم الله تكليماً عند جبل الطور وأرسل بآيات مبينات لفرعون؟", answer: "موسى", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "m3", letter: "م", question: "فرع الفلسفة الذي يدرس المبادئ الأولى والوجود والواقع وراء الحدود الفيزيائية؟", answer: "الميتافيزيقا", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "m4", letter: "م", question: "الملك المقرب المسؤول عن إنزال المطر والنبات وتوزيع الأرزاق على الخلائق؟", answer: "ميكائيل", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "m5", letter: "م", question: "الدولة الأندلسية الأخيرة التي حكمها بنو الأحمر في جنوب الأندلس وسقطت بغرناطة؟", answer: "مملكة غرناطة", category: "ثقافة عامة", difficulty: "medium", type: "general" }
+  ],
+  "ن": [
+    { id: "n1", letter: "ن", question: "من هو النبي الذي بنى الفلك بأمر الله ونجا المؤمنون معه من الطوفان العظيم؟", answer: "نوح", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "n2", letter: "ن", question: "سورة قرآنية تفتتح بقسم بالملائكة التي تنزع أرواح الكفار بشدة؟", answer: "النازعات", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "n3", letter: "ن", question: "الجزء في الخلية الحيوانية المسؤول عن تنظيم كافة العمليات الحيوية وتخزين DNA؟", answer: "النواة", category: "ثقافة عامة", difficulty: "easy", type: "general" },
+    { id: "n4", letter: "ن", question: "سورة في القرآن الكريم تسمى سورة التوديع وبشرت بالنصر والفتح الأكبر؟", answer: "النصر", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "n5", letter: "ن", question: "النظرية الفيزيائية لأينشتاين التي تصف الجاذبية كانحناء في نسيج الزمان والمكان؟", answer: "النسبية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "هـ": [
+    { id: "h_1", letter: "هـ", question: "الهجرة التاريخية الكبرى التي اتخذها عمر بن الخطاب مبدأً للتقويم الهجري؟", answer: "الهجرة النبوية", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "h_2", letter: "هـ", question: "البروتين الغني بالحديد الموجود في خلايا الدم الحمراء والمسؤول عن نقل الأكسجين؟", answer: "الهيموغلوبين", category: "ثقافة عامة", difficulty: "medium", type: "general" },
+    { id: "h_3", letter: "هـ", question: "الاسم الفلسفي للنظرية التي ترى أن اللذة الحسية والمادية هي الخير الأسمى للإنسان؟", answer: "الهدونية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "h_4", letter: "هـ", question: "زوجة النبي إبراهيم وأم نبي الله إسماعيل والتي طافت بين الصفا والمروة بحثاً عن الماء؟", answer: "هاجر", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "h_5", letter: "هـ", question: "الفن أو العلم المختص بكيفية تفسير النصوص الفلسفية الأدبية والدينية وفهمها؟", answer: "الهيرمينوطيقا", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "و": [
+    { id: "w1", letter: "و", question: "صلاة فردية تؤدى في الليل بعد العشاء وتعتبر ختاماً لصلاة الليل؟", answer: "الوتر", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "w2", letter: "و", question: "الطهارة الشرعية بالماء التي تسبق الصلاة وبدونها لا تصح صلاة المسلم؟", answer: "الوضوء", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "w3", letter: "و", question: "تيار فلسفي يؤكد على حرية الفرد ومسؤوليته الشخصية في تحديد مصيره ومعنى حياته؟", answer: "الوجودية", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "w4", letter: "و", question: "الوصية أو الموعظة التي يتركها الشخص قبل موته للتصرف في جزء من ماله للخير؟", answer: "الوصية", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "w5", letter: "و", question: "مدرسة فلسفية معاصرة ترفض الميتافيزيقا وتقول إن القضايا ذات المعنى هي القابلة للتحقق التجريبي فقط؟", answer: "الوضعية المنطقية", category: "ثقافة عامة", difficulty: "hard", type: "general" }
+  ],
+  "ي": [
+    { id: "y1", letter: "ي", question: "النبي الكريم ابن الكريم الذي سجن مظلوماً وفسر الرؤى وصار عزيز مصر؟", answer: "يوسف", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "y2", letter: "ي", question: "من هو النبي الملقب بذي النون والذي التقمه الحوت فدعا الله في الظلمات؟", answer: "يونس", category: "إسلاميات", difficulty: "easy", type: "islamic" },
+    { id: "y3", letter: "ي", question: "العنصر الكيميائي المشع ذو العدد الذري 92 والذي يعتبر الوقود الأساسي للمفاعلات النووية؟", answer: "اليورانيوم", category: "ثقافة عامة", difficulty: "hard", type: "general" },
+    { id: "y4", letter: "ي", question: "حالة إيمانية يقينية راسخة لا يتطرق إليها أي شك أو ارتياب في العقيدة الإسلامية؟", answer: "اليقين", category: "إسلاميات", difficulty: "medium", type: "islamic" },
+    { id: "y5", letter: "ي", question: "الإمبراطورية التاريخية العريقة في شرق آسيا التي تميزت بنظام حكم الشوغون والساموراي؟", answer: "اليابان", category: "ثقافة عامة", difficulty: "easy", type: "general" }
+  ]
+};
+
+        const ARABIC_LETTERS = ["أ", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "هـ", "و", "ي"];
+        const DEFAULT_ROOM_CODE = "1234";
+
+        // --- GAME STATE ---
+        let role = "lobby";
+        let roomCode = DEFAULT_ROOM_CODE;
+        let playerName = "";
+        let team = "red";
+        
+        let gameType = "general";
+        let difficulty = "medium";
+        let gridSize = 5;
+        let teamRedName = "الفريق الأحمر";
+        let teamGreenName = "الفريق الأخضر";
+        
+        let grid = [];
+        let activeCell = null;
+        let scores = { red: 0, green: 0 };
+        let turn = "red";
+        let winner = null;
+        let connectedPlayers = [];
+        let gameHistory = [];
+
+        // Buzzer States
+        let buzzerWinner = null;
+        let submittedAnswer = "";
+        let isBuzzedByMe = false;
+        let showAnswerForHost = false;
+
+        let soundEnabled = true;
+        let ttsEnabled = true;
+        let mqttClient = null;
+        let joinInterval = null;
+
+        // --- WEB AUDIO API SYNTHESIZER ---
+        class GameSounds {
+            constructor() { this.ctx = null; this.suspenseOsc = null; this.suspenseGain = null; }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.ctx.state === 'suspended') { this.ctx.resume(); }
+            }
+            playCorrect() {
+                this.init(); if (!this.ctx) return; const now = this.ctx.currentTime; const freqs = [261.63, 329.63, 392.00, 523.25];
+                freqs.forEach((freq, index) => {
+                    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain(); osc.type = 'sine'; osc.frequency.setValueAtTime(freq, now + index * 0.08);
+                    gain.gain.setValueAtTime(0, now + index * 0.08); gain.gain.linearRampToValueAtTime(0.2, now + index * 0.08 + 0.03); gain.gain.exponentialRampToValueAtTime(0.001, now + index * 0.08 + 0.25);
+                    osc.connect(gain); gain.connect(this.ctx.destination); osc.start(now + index * 0.08); osc.stop(now + index * 0.08 + 0.3);
+                });
+            }
+            playWrong() {
+                this.init(); if (!this.ctx) return; const now = this.ctx.currentTime; const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(140, now); osc.frequency.linearRampToValueAtTime(70, now + 0.45);
+                gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45); osc.connect(gain); gain.connect(this.ctx.destination); osc.start(now); osc.stop(now + 0.45);
+            }
+            playApplause() {
+                this.init(); if (!this.ctx) return; const now = this.ctx.currentTime; const bufferSize = this.ctx.sampleRate * 2.0; const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { data[i] = Math.random() * 2 - 1; }
+                const noise = this.ctx.createBufferSource(); noise.buffer = buffer; const filter = this.ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 950; filter.Q.value = 1.2;
+                const gain = this.ctx.createGain(); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.25, now + 0.25); gain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+                noise.connect(filter); filter.connect(gain); gain.connect(this.ctx.destination); noise.start(now); noise.stop(now + 2.0);
+            }
+            playVictory() {
+                this.init(); if (!this.ctx) return; const now = this.ctx.currentTime; const notes = [{ f: 261.63, t: 0.0, d: 0.12 }, { f: 392.00, t: 0.12, d: 0.12 }, { f: 523.25, t: 0.24, d: 0.12 }, { f: 659.25, t: 0.36, d: 0.12 }, { f: 783.99, t: 0.48, d: 0.24 }, { f: 1046.50, t: 0.72, d: 0.6 }];
+                notes.forEach(note => {
+                    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain(); osc.type = 'triangle'; osc.frequency.setValueAtTime(note.f, now + note.t);
+                    gain.gain.setValueAtTime(0, now + note.t); gain.gain.linearRampToValueAtTime(0.2, now + note.t + 0.02); gain.gain.exponentialRampToValueAtTime(0.001, now + note.t + note.d);
+                    osc.connect(gain); gain.connect(this.ctx.destination); osc.start(now + note.t); osc.stop(now + note.t + note.d);
+                });
+            }
+            startSuspense() {
+                this.init(); if (!this.ctx || this.suspenseOsc) return; const now = this.ctx.currentTime; this.suspenseOsc = this.ctx.createOscillator(); this.suspenseGain = this.ctx.createGain();
+                this.suspenseOsc.type = 'sine'; this.suspenseOsc.frequency.setValueAtTime(90, now); this.suspenseGain.gain.setValueAtTime(0, now); this.suspenseGain.gain.linearRampToValueAtTime(0.12, now + 1.0);
+                this.suspenseOsc.connect(this.suspenseGain); this.suspenseGain.connect(this.ctx.destination); this.suspenseOsc.start(now);
+            }
+            stopSuspense() {
+                if (!this.ctx || !this.suspenseOsc || !this.suspenseGain) return; const now = this.ctx.currentTime;
+                try {
+                    this.suspenseGain.gain.cancelScheduledValues(now); this.suspenseGain.gain.setValueAtTime(this.suspenseGain.gain.value, now); this.suspenseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+                    const osc = this.suspenseOsc; setTimeout(() => { try { osc.stop(); } catch(e) {} }, 600);
+                } catch(e) {}
+                this.suspenseOsc = null; this.suspenseGain = null;
+            }
+        }
+        const sounds = new GameSounds();
+
+        // --- TTS SPEAKER ---
+        function speakWithOmar(text) {
+            if (!ttsEnabled || typeof window === "undefined" || !window.speechSynthesis) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text); utterance.lang = "ar-SA"; utterance.rate = 1.05; utterance.pitch = 0.95;
+            const voices = window.speechSynthesis.getVoices(); const arVoice = voices.find(v => v.lang.includes("ar-SA") || v.lang.startsWith("ar"));
+            if (arVoice) utterance.voice = arVoice;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function triggerSound(type) {
+            if (!soundEnabled) return;
+            if (type === "correct") sounds.playCorrect();
+            else if (type === "wrong") sounds.playWrong();
+            else if (type === "applause") sounds.playApplause();
+            else if (type === "victory") sounds.playVictory();
+        }
+
+        // --- INITIALIZATION ---
+        window.addEventListener('load', () => {
+            document.getElementById('toggle-sound-btn').addEventListener('click', toggleSound);
+            document.getElementById('toggle-tts-btn').addEventListener('click', toggleTts);
+            document.getElementById('leave-room-btn').addEventListener('click', leaveRoom);
+            
+            // Random default player name
+            const randNum = Math.floor(10 + Math.random() * 90);
+            document.getElementById('player-name-input').value = `متسابق ${randNum}`;
+
+            if (window.speechSynthesis) {
+                window.speechSynthesis.getVoices();
+                window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+            }
+        });
+
+        // --- BUTTON SETTINGS ACTIONS ---
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('toggle-sound-btn');
+            if (soundEnabled) { btn.classList.add('active'); btn.textContent = "الأصوات: مفعلة"; }
+            else { btn.classList.remove('active'); btn.textContent = "الأصوات: معطلة"; }
+        }
+
+        function toggleTts() {
+            ttsEnabled = !ttsEnabled;
+            const btn = document.getElementById('toggle-tts-btn');
+            if (ttsEnabled) { btn.classList.add('active'); btn.textContent = "كلام عمر: مفعل"; }
+            else { btn.classList.remove('active'); btn.textContent = "كلام عمر: معطل"; }
+        }
+
+        function leaveRoom() {
+            if (confirm("هل تريد مغادرة الغرفة والعودة للقائمة؟")) {
+                if (mqttClient) mqttClient.end();
+                if (joinInterval) { clearInterval(joinInterval); joinInterval = null; }
+                role = "lobby";
+                connectedPlayers = [];
+                showView("lobby");
+            }
+        }
+
+        // --- VIEW CONTROLLER ---
+        function showView(viewName) {
+            if (viewName === "lobby") {
+                document.getElementById('lobby-view').classList.remove('hidden');
+                document.getElementById('waiting-lobby').classList.add('hidden');
+                document.getElementById('game-view').classList.add('hidden');
+                document.getElementById('leave-room-btn').classList.add('hidden');
+            } else if (viewName === "waiting") {
+                document.getElementById('lobby-view').classList.add('hidden');
+                document.getElementById('waiting-lobby').classList.remove('hidden');
+                document.getElementById('game-view').classList.add('hidden');
+            } else if (viewName === "game") {
+                document.getElementById('lobby-view').classList.add('hidden');
+                document.getElementById('waiting-lobby').classList.add('hidden');
+                document.getElementById('game-view').classList.remove('hidden');
+                document.getElementById('leave-room-btn').classList.remove('hidden');
+            }
+        }
+
+        // --- MQTT CONNECTION ---
+        function connectMQTT(userRole, targetTeam, nameToSend) {
+            if (mqttClient) mqttClient.end();
+            if (joinInterval) { clearInterval(joinInterval); joinInterval = null; }
+
+            mqttClient = mqtt.connect("wss://broker.hivemq.com:8000/mqtt");
+
+            mqttClient.on('connect', () => {
+                console.log("Connected to MQTT Broker via Websockets");
+                if (userRole === "host") {
+                    mqttClient.subscribe(`hroof-omar/rooms/${DEFAULT_ROOM_CODE}/client`);
+                    logAction(`تم إنشاء البث وتفعيل اللوحة الرئيسية`);
+                } else {
+                    mqttClient.subscribe(`hroof-omar/rooms/${DEFAULT_ROOM_CODE}/host`);
+                    
+                    const sendJoinRequest = () => {
+                        mqttClient.publish(`hroof-omar/rooms/${DEFAULT_ROOM_CODE}/client`, JSON.stringify({
+                            type: "JOIN_REQUEST",
+                            playerName: nameToSend,
+                            team: targetTeam,
+                            password: ""
+                        }));
+                    };
+
+                    // Send immediately
+                    sendJoinRequest();
+
+                    // Retry every 1.5s
+                    joinInterval = setInterval(sendJoinRequest, 1500);
+                }
+            });
+
+        function broadcastToPlayers(msgObj) {
+            if (mqttClient) {
+                mqttClient.publish(`hroof-omar/rooms/${DEFAULT_ROOM_CODE}/host`, JSON.stringify(msgObj));
+            }
+        }
+
+        // --- MULTIPLAYER MESSAGE HANDLERS ---
+        function handleRealtimeMessage(data, userRole, currentName, currentTeam) {
+            if (userRole === "host") {
+                switch (data.type) {
+                    case "JOIN_REQUEST":
+                        // Auto-approve instantly
+                        const exists = connectedPlayers.some(p => p.name === data.playerName && p.team === data.team);
+                        if (!exists) {
+                            connectedPlayers.push({ name: data.playerName, team: data.team });
+                            syncPlayersListDisplay();
+                            broadcastToPlayers({ type: "PLAYERS_UPDATE", players: connectedPlayers });
+                        }
+                        
+                        // Send sync state
+                        broadcastToPlayers({
+                            type: "JOIN_RESPONSE",
+                            playerName: data.playerName,
+                            status: "success",
+                            team: data.team,
+                            syncState: { grid, scores, turn, winner, teamRedName, teamGreenName, activeCell }
+                        });
+                        logAction(`انضم اللاعب [${data.playerName}] إلى فريق ${data.team === 'red' ? teamRedName : teamGreenName}`);
+                        break;
+
+                    case "BUZZ":
+                        if (!buzzerWinner && activeCell) {
+                            triggerSound("correct");
+                            buzzerWinner = { name: data.playerName, team: data.team };
+                            
+                            broadcastToPlayers({ type: "BUZZ_WINNER", winner: buzzerWinner });
+                            
+                            updateOmarLive("thinking", `اللاعب [${data.playerName}] من فريق ${data.team === 'red' ? teamRedName : teamGreenName} ضغط أولاً! بانتظار كتابة إجابته...`);
+                            speakWithOmar(`تأهل اللاعب ${data.playerName} للإجابة`);
+                            logAction(`حجز الجرس لصالح [${data.playerName}]`);
+                            
+                            // Display winner name in Host Question popup
+                            document.getElementById('buzz-waiting-panel').classList.add('hidden');
+                            document.getElementById('buzz-result-panel').classList.remove('hidden');
+                            document.getElementById('buzz-winner-name-lbl').textContent = buzzerWinner.name;
+                            document.getElementById('submitted-answer-lbl').textContent = "جاري كتابة الإجابة الآن...";
+                            document.getElementById('submitted-answer-lbl').className = "answer-waiting text-amber-400 animate-pulse";
+                        }
+                        break;
+
+                    case "ANSWER_SUBMITTED":
+                        submittedAnswer = data.answer;
+                        document.getElementById('submitted-answer-lbl').textContent = `"${data.answer}"`;
+                        document.getElementById('submitted-answer-lbl').className = "answer-submitted text-emerald-400";
+                        updateOmarLive("thinking", `كتب اللاعب إجابته: "${data.answer}". هل الإجابة صحيحة يا موجه؟`);
+                        logAction(`أرسل اللاعب إجابته المكتوبة: "${data.answer}"`);
+                        break;
+                }
+            } else {
+                // Player role messages
+                switch (data.type) {
+                    case "JOIN_RESPONSE":
+                        if (data.playerName === currentName) {
+                            showView("game");
+                            if (joinInterval) { clearInterval(joinInterval); joinInterval = null; }
+                            // Load synced state
+                            if (data.syncState) {
+                                grid = data.syncState.grid;
+                                scores = data.syncState.scores;
+                                turn = data.syncState.turn;
+                                winner = data.syncState.winner;
+                                teamRedName = data.syncState.teamRedName;
+                                teamGreenName = data.syncState.teamGreenName;
+                                activeCell = data.syncState.activeCell;
+                                
+                                renderSvgGrid();
+                                syncDisplayState();
+                            }
+                        }
+                        break;
+
+                    case "PLAYERS_UPDATE":
+                        connectedPlayers = data.players;
+                        syncPlayersListDisplay();
+                        break;
+
+                    case "STATE_SYNC":
+                        grid = data.grid;
+                        scores = data.scores;
+                        turn = data.turn;
+                        winner = data.winner;
+                        teamRedName = data.teamRedName;
+                        teamGreenName = data.teamGreenName;
+                        activeCell = data.activeCell;
+                        
+                        renderSvgGrid();
+                        syncDisplayState();
+                        
+                        if (!activeCell) {
+                            document.getElementById('player-active-modal').classList.add('hidden');
+                            buzzerWinner = null;
+                            submittedAnswer = "";
+                            isBuzzedByMe = false;
+                        }
+                        break;
+
+                    case "CELL_SELECTED":
+                        activeCell = {
+                            id: data.cellId, row: 0, col: 0, letter: data.letter, owner: null,
+                            question: { id: "", question: data.question, answer: "", category: data.category }
+                        };
+                        buzzerWinner = null;
+                        submittedAnswer = "";
+                        isBuzzedByMe = false;
+                        
+                        openPlayerActiveDialog();
+                        break;
+
+                    case "BUZZ_WINNER":
+                        buzzerWinner = data.winner;
+                        updatePlayerDialogState();
+                        break;
+
+                    case "ANSWER_BROADCAST":
+                        submittedAnswer = data.answer;
+                        document.getElementById('other-submitted-ans-box').classList.remove('hidden');
+                        document.getElementById('other-submitted-ans-lbl').textContent = `"${data.answer}"`;
+                        break;
+
+                    case "RESET_BUZZER":
+                        buzzerWinner = null;
+                        submittedAnswer = "";
+                        isBuzzedByMe = false;
+                        document.getElementById('player-typed-answer-input').value = "";
+                        document.getElementById('player-typed-answer-input').disabled = false;
+                        document.getElementById('player-submit-ans-btn').classList.remove('hidden');
+                        document.getElementById('player-answer-submitted-badge').classList.add('hidden');
+                        updatePlayerDialogState();
+                        break;
+                }
+            }
+        }
+
+        // --- HOST ACTIONS ---
+        function hostCreateRoom() {
+            gameType = document.getElementById('host-game-type').value;
+            difficulty = document.getElementById('host-difficulty').value;
+            gridSize = parseInt(document.getElementById('host-grid-size').value);
+            teamRedName = document.getElementById('host-red-name').value.trim() || "الفريق الأحمر";
+            teamGreenName = document.getElementById('host-green-name').value.trim() || "الفريق الأخضر";
+
+            role = "host";
+            connectMQTT("host", "red", "الموجه");
+            
+            // Generate board grid
+            generateHoneycombGrid();
+            
+            // UI elements
+            document.getElementById('soundboard-card-container').classList.remove('hidden');
+            document.getElementById('host-reset-area').classList.remove('hidden');
+
+            syncDisplayState();
+            showView("game");
+            
+            const startSpeech = `تم إنشاء البث بنمط ${gameType === 'islamic' ? 'الأسئلة الإسلامية' : 'الأسئلة العامة'}. شاشة العرض جاهزة الآن لربط هواتف المتسابقين!`;
+            updateOmarLive("idle", startSpeech);
+            speakWithOmar(startSpeech);
+        }
+
+        function generateHoneycombGrid() {
+            const alphabet = [...ARABIC_LETTERS];
+            const totalCells = gridSize * gridSize;
+            const cellLetters = [];
+
+            for (let i = 0; i < totalCells; i++) {
+                const unused = alphabet.filter(l => !cellLetters.includes(l));
+                const pool = unused.length > 0 ? unused : alphabet;
+                cellLetters.push(pool[Math.floor(Math.random() * pool.length)]);
+            }
+
+            grid = [];
+            let letterIndex = 0;
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const letter = cellLetters[letterIndex++];
+                    const q = getQuestionForLetter(letter, gameType, difficulty);
+                    grid.push({ id: `cell-${r}-${c}`, row: r, col: c, letter, owner: null, question: q });
+                }
+            }
+
+            scores = { red: 0, green: 0 };
+            turn = "red";
+            winner = null;
+            activeCell = null;
+            buzzerWinner = null;
+            submittedAnswer = "";
+
+            renderSvgGrid();
+
+            // Broadcast grid sync
+            broadcastToPlayers({
+                type: "STATE_SYNC", grid, scores, turn, winner, teamRedName, teamGreenName, activeCell: null
+            });
+        }
+
+        // --- PLAYER ACTIONS ---
+        function playerJoinTeam(selectedTeam) {
+            const nameInput = document.getElementById('player-name-input').value.trim();
+            team = selectedTeam;
+            playerName = nameInput || (selectedTeam === "red" ? "متسابق الأحمر" : "متسابق الأخضر");
+
+            role = "player";
+            showView("waiting");
+            
+            // Hide Host UI controls
+            document.getElementById('soundboard-card-container').classList.add('hidden');
+            document.getElementById('host-reset-area').classList.add('hidden');
+
+            connectMQTT("player", selectedTeam, playerName);
+        }
+
+        function playerPressBuzzer() {
+            if (role !== "player" || buzzerWinner || isBuzzedByMe) return;
+            isBuzzedByMe = true;
+            document.getElementById('player-buzz-btn').textContent = "جاري الحجز...";
+            document.getElementById('player-buzz-btn').classList.add('buzzed');
+
+            if (mqttClient) {
+                mqttClient.publish(`hroof-omar/rooms/${DEFAULT_ROOM_CODE}/client`, JSON.stringify({
+                    type: "BUZZ", playerName, team
+                }));
+            }
+        }
+
+        function playerSubmitAnswer() {
+            const answerInput = document.getElementById('player-typed-answer-input');
+            const answer = answerInput.value.trim();
+            if (!answer) return;
+
+            submittedAnswer = answer;
+            
+            // UI elements disabled
+            answerInput.disabled = true;
+            document.getElementById('player-submit-ans-btn').classList.add('hidden');
+            document.getElementById('player-answer-submitted-badge').classList.remove('hidden');
+
+            // Send to Host
+            if (mqttClient) {
+                mqttClient.publish(`hroof-omar/rooms/${DEFAULT_ROOM_CODE}/client`, JSON.stringify({
+                    type: "ANSWER_SUBMITTED", answer
+                }));
+            }
+        }
+
+        // --- HOST EVALUATE ---
+        function claimCellDirect(owner) {
+            if (!activeCell || role !== "host") return;
+
+            grid = grid.map(c => {
+                if (c.id === activeCell.id) return { ...c, owner };
+                return c;
+            });
+
+            // Re-sync scores
+            const redScore = grid.filter(c => c.owner === 'red').length;
+            const greenScore = grid.filter(c => c.owner === 'green').length;
+            scores = { red: redScore, green: greenScore };
+
+            closeModal();
+
+            // Check winner path
+            const pathWinner = checkWinner();
+            if (pathWinner) {
+                winner = pathWinner;
+                triggerSound("victory"); triggerSound("applause");
+                const wName = winner === 'red' ? teamRedName : teamGreenName;
+                const winSpeech = `مبروك! تمكن ${wName} من توصيل مساره بالكامل وفاز بالتحدي!`;
+                updateOmarLive("happy", winSpeech);
+                speakWithOmar(winSpeech);
+                logAction(`انتهى التحدي بفوز: ${wName} 🎉`);
+            } else {
+                if (owner === "blocked") {
+                    triggerSound("wrong");
+                    updateOmarLive("sad", `تم قفل خلية حرف (${activeCell.letter}) على الجميع.`);
+                    logAction(`تم قفل خلية حرف (${activeCell.letter})`);
+                } else {
+                    triggerSound("correct");
+                    const tName = owner === 'red' ? teamRedName : teamGreenName;
+                    updateOmarLive("happy", `إجابة صحيحة! تلوين خلية حرف (${activeCell.letter}) لصالح ${tName}`);
+                    logAction(`تم تلوين حرف (${activeCell.letter}) لـ ${tName}`);
+                }
+                turn = turn === 'red' ? 'green' : 'red';
+            }
+
+            // Sync state
+            broadcastToPlayers({
+                type: "STATE_SYNC", grid, scores, turn, winner, teamRedName, teamGreenName, activeCell: null
+            });
+            activeCell = null;
+            buzzerWinner = null;
+            submittedAnswer = "";
+            
+            syncDisplayState();
+        }
+
+        function hostResetBuzzer() {
+            if (role !== "host") return;
+            buzzerWinner = null;
+            submittedAnswer = "";
+            
+            document.getElementById('buzz-waiting-panel').classList.remove('hidden');
+            document.getElementById('buzz-result-panel').classList.add('hidden');
+            
+            updateOmarLive("thinking", "إجابة خاطئة أو لم يرسل اللاعب الإجابة. تم تصفير الجرس وإعادته للجميع!");
+            speakWithOmar("تم تصفير الجرس");
+            broadcastToPlayers({ type: "RESET_BUZZER" });
+            logAction("تم إعادة تفعيل الجرس لنفس السؤال");
+        }
+
+        // --- DISPLAY SYNCHRONIZERS ---
+        function syncDisplayState() {
+            document.getElementById('score-red-name').textContent = teamRedName;
+            document.getElementById('score-green-name').textContent = teamGreenName;
+            document.getElementById('score-red-val').textContent = scores.red;
+            document.getElementById('score-green-val').textContent = scores.green;
+
+            document.getElementById('boundary-top-label').textContent = `↓ ${teamGreenName} (أعلى إلى أسفل) ↓`;
+            document.getElementById('boundary-bottom-label').textContent = `↓ ${teamGreenName} (أعلى إلى أسفل) ↓`;
+            document.getElementById('boundary-left-label').textContent = `→ ${teamRedName} (يمين إلى يسار) →`;
+            document.getElementById('boundary-right-label').textContent = `→ ${teamRedName} (يمين إلى يسار) →`;
+
+            const turnName = turn === 'red' ? teamRedName : teamGreenName;
+            const banner = document.getElementById('turn-banner');
+            banner.className = `turn-banner ${turn}`;
+            banner.textContent = `دور ${turnName} في الاختيار`;
+
+            // Connection rules card sync
+            document.getElementById('connection-rules-content').innerHTML = `
+                <p><strong>طريقة الربط:</strong> <span class="highlight-code">اتصال تلقائي فوري</span></p>
+                ${role === 'host' ? `
+                    <p><strong>شاشة العرض:</strong> لوحة التحكم بالشبكة</p>
+                ` : `
+                    <p><strong>اسم المتسابق:</strong> ${playerName}</p>
+                    <p><strong>الفريق:</strong> ${team === 'red' ? 'الأحمر ↔' : 'الأخضر ↕'}</p>
+                `}
+            `;
+
+            if (winner) {
+                const wName = winner === 'red' ? teamRedName : teamGreenName;
+                document.getElementById('winner-text').textContent = `الفائز بالتحدي: ${wName}!`;
+                document.getElementById('winner-banner').classList.remove('hidden');
+                triggerConfetti();
+            } else {
+                document.getElementById('winner-banner').classList.add('hidden');
+            }
+        }
+
+        function syncPlayersListDisplay() {
+            document.getElementById('players-list-title').textContent = `اللاعبون المتصلون (${connectedPlayers.length}) 👥`;
+            const scrollArea = document.getElementById('connected-players-list');
+            scrollArea.innerHTML = "";
+            if (connectedPlayers.length === 0) {
+                scrollArea.innerHTML = `<p class="no-players">لا يوجد لاعبون متصلون بعد.</p>`;
+            } else {
+                connectedPlayers.forEach(p => {
+                    const badge = document.createElement('div');
+                    badge.className = "player-badge";
+                    badge.innerHTML = `
+                        <span class="bullet ${p.team}"></span>
+                        <span class="player-name-txt">${p.name}</span>
+                        <span class="team-tag">${p.team === 'red' ? 'الأحمر' : 'الأخضر'}</span>
+                    `;
+                    scrollArea.appendChild(badge);
+                });
+            }
+        }
+
+        // --- GRID GRAPHICS AND LOGIC ---
+        function renderSvgGrid() {
+            const wrapper = document.getElementById('svg-wrapper');
+            const R = 38; const W = 1.732 * R; const dx = W; const dy = 1.5 * R;
+            const offsetX = 50; const offsetY = 50;
+            const svgWidth = gridSize * dx + 80; const svgHeight = gridSize * dy + 100;
+
+            let hexagonsHtml = '';
+            grid.forEach(cell => {
+                const isOdd = cell.row % 2 === 1;
+                const cx = cell.col * dx + (isOdd ? dx / 2 : 0) + offsetX;
+                const cy = cell.row * dy + offsetY;
+                const points = [];
+                for (let i = 0; i < 6; i++) {
+                    const angleRad = (Math.PI / 180) * (30 + i * 60);
+                    points.push(`${cx + R * Math.cos(angleRad)},${cy + R * Math.sin(angleRad)}`);
+                }
+
+                let colorClass = 'hex-empty';
+                if (cell.owner === 'red') colorClass = 'hex-red';
+                else if (cell.owner === 'green') colorClass = 'hex-green';
+                else if (cell.owner === 'blocked') colorClass = 'hex-blocked';
+                else if (activeCell && activeCell.id === cell.id) colorClass = 'hex-active';
+
+                hexagonsHtml += `
+                    <g class="hex-group ${colorClass}" style="cursor: ${cell.owner || winner || role !== 'host' ? 'not-allowed' : 'pointer'};" onclick="onHexagonClick('${cell.id}')">
+                        <polygon points="${points.join(' ')}" class="hex-polygon" />
+                        <polygon points="${points.join(' ')}" class="hex-glow" />
+                        <text x="${cx}" y="${cy + 8}" class="hex-text" text-anchor="middle">${cell.letter}</text>
+                    </g>
+                `;
+            });
+            wrapper.innerHTML = `<svg viewBox="0 0 ${svgWidth} ${svgHeight}" class="honeycomb-svg">${hexagonsHtml}</svg>`;
+        }
+
+        function onHexagonClick(cellId) {
+            if (role !== "host" || winner) return;
+            const cell = grid.find(c => c.id === cellId);
+            if (!cell || cell.owner) return;
+
+            activeCell = cell;
+            renderSvgGrid();
+
+            document.getElementById('modal-letter').textContent = cell.letter;
+            document.getElementById('modal-letter-title').textContent = `حرف ${cell.letter}`;
+            document.getElementById('modal-category').textContent = cell.question.category;
+            document.getElementById('modal-question-text').textContent = cell.question.question;
+            document.getElementById('model-answer-val').textContent = cell.question.answer;
+
+            document.getElementById('answer-text-reveal').classList.add('hidden');
+            document.getElementById('show-answer-btn').classList.remove('hidden');
+
+            // Reset buzz panel
+            document.getElementById('buzz-waiting-panel').classList.remove('hidden');
+            document.getElementById('buzz-result-panel').classList.add('hidden');
+
+            const footer = document.getElementById('modal-footer-actions');
+            footer.innerHTML = `
+                <button class="btn-action-claim red" onclick="claimCellDirect('red')">✓ صحيح للأحمر (${teamRedName})</button>
+                <button class="btn-action-claim green" onclick="claimCellDirect('green')">✓ صحيح للأخضر (${teamGreenName})</button>
+                <button class="btn-action-claim block-btn" onclick="claimCellDirect('blocked')">✕ قفل الخلية</button>
+                <button class="btn-secondary hidden" id="host-buzz-reset-btn" onclick="hostResetBuzzer()">🔄 تصفير الجرس وإعادتها</button>
+            `;
+
+            if (soundEnabled) sounds.startSuspense();
+
+            const questionText = `سؤال بحرف (${cell.letter}). الفئة: ${cell.question.category}. يقول السؤال: ${cell.question.question}`;
+            updateOmarLive("thinking", questionText);
+            speakWithOmar(questionText);
+
+            // Broadcast cell open
+            broadcastToPlayers({
+                type: "CELL_SELECTED", cellId: cell.id, letter: cell.letter, category: cell.category, question: cell.question.question
+            });
+
+            document.getElementById('question-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('question-modal').classList.add('hidden');
+            activeCell = null;
+            sounds.stopSuspense();
+            renderSvgGrid();
+        }
+
+        function revealAnswer() {
+            document.getElementById('show-answer-btn').classList.add('hidden');
+            document.getElementById('answer-text-reveal').classList.remove('hidden');
+        }
+
+        function readQuestionAloud() {
+            if (activeCell) { speakWithOmar(activeCell.question.question); }
+        }
+
+        // --- PLAYER SCREEN CONTROL ---
+        function openPlayerActiveDialog() {
+            if (role !== "player" || !activeCell) return;
+
+            document.getElementById('player-buzzer-header').textContent = `حرف ${activeCell.letter} | ${activeCell.question.category}`;
+            document.getElementById('player-buzz-btn').textContent = "اضغط الآن! 🔴";
+            document.getElementById('player-buzz-btn').classList.remove('buzzed');
+
+            // Reset inputs
+            document.getElementById('player-typed-answer-input').value = "";
+            document.getElementById('player-typed-answer-input').disabled = false;
+            document.getElementById('player-submit-ans-btn').classList.remove('hidden');
+            document.getElementById('player-answer-submitted-badge').classList.add('hidden');
+
+            document.getElementById('player-active-modal').classList.remove('hidden');
+            updatePlayerDialogState();
+        }
+
+        function updatePlayerDialogState() {
+            const buzzScreen = document.getElementById('player-buzzer-screen');
+            const ansScreen = document.getElementById('player-answer-entry-screen');
+            const specScreen = document.getElementById('player-spectator-screen');
+
+            buzzScreen.classList.add('hidden');
+            ansScreen.classList.add('hidden');
+            specScreen.classList.add('hidden');
+
+            if (!buzzerWinner) {
+                buzzScreen.classList.remove('hidden');
+            } else if (buzzerWinner.name === playerName) {
+                // I won the buzz
+                ansScreen.classList.remove('hidden');
+                document.getElementById('player-question-txt').textContent = activeCell.question.question;
+            } else {
+                // Other won
+                specScreen.classList.remove('hidden');
+                document.getElementById('player-spectator-header').textContent = `حرف ${activeCell.letter} | ${activeCell.question.category}`;
+                document.getElementById('other-buzz-winner-lbl').textContent = buzzerWinner.name;
+                document.getElementById('other-submitted-ans-box').classList.add('hidden');
+            }
+        }
+
+        // --- PATH FINDING BFS ---
+        function getNeighbors(r, c) {
+            const neighbors = [];
+            if (r % 2 === 0) {
+                neighbors.push({ r: r, c: c - 1 }); neighbors.push({ r: r, c: c + 1 });
+                neighbors.push({ r: r - 1, c: c - 1 }); neighbors.push({ r: r - 1, c: c });
+                neighbors.push({ r: r + 1, c: c - 1 }); neighbors.push({ r: r + 1, c: c });
+            } else {
+                neighbors.push({ r: r, c: c - 1 }); neighbors.push({ r: r, c: c + 1 });
+                neighbors.push({ r: r - 1, c: c }); neighbors.push({ r: r - 1, c: c + 1 });
+                neighbors.push({ r: r + 1, c: c }); neighbors.push({ r: r + 1, c: c + 1 });
+            }
+            return neighbors.filter(n => n.r >= 0 && n.c >= 0 && n.c < gridSize && n.r < gridSize);
+        }
+
+        function checkWinner() {
+            const getCell = (r, c) => grid.find(cell => cell.row === r && cell.col === c);
+
+            // 1. Red (Left to Right)
+            let redQueue = grid.filter(cell => cell.col === 0 && cell.owner === 'red');
+            let redVisited = new Set(redQueue.map(c => `${c.row},${c.col}`));
+            let redWon = false;
+
+            while (redQueue.length > 0) {
+                const curr = redQueue.shift();
+                if (curr.col === gridSize - 1) { redWon = true; break; }
+                const neighbors = getNeighbors(curr.row, curr.col);
+                for (const n of neighbors) {
+                    const key = `${n.r},${n.c}`;
+                    if (!redVisited.has(key)) {
+                        const neighborCell = getCell(n.r, n.c);
+                        if (neighborCell && neighborCell.owner === 'red') { redVisited.add(key); redQueue.push(neighborCell); }
+                    }
+                }
+            }
+            if (redWon) return 'red';
+
+            // 2. Green (Top to Bottom)
+            let greenQueue = grid.filter(cell => cell.row === 0 && cell.owner === 'green');
+            let greenVisited = new Set(greenQueue.map(c => `${c.row},${c.col}`));
+            let greenWon = false;
+
+            while (greenQueue.length > 0) {
+                const curr = greenQueue.shift();
+                if (curr.row === gridSize - 1) { greenWon = true; break; }
+                const neighbors = getNeighbors(curr.row, curr.col);
+                for (const n of neighbors) {
+                    const key = `${n.r},${n.c}`;
+                    if (!greenVisited.has(key)) {
+                        const neighborCell = getCell(n.r, n.c);
+                        if (neighborCell && neighborCell.owner === 'green') { greenVisited.add(key); greenQueue.push(neighborCell); }
+                    }
+                }
+            }
+            if (greenWon) return 'green';
+
+            return null;
+        }
+
+        function getQuestionForLetter(letter, type, diff) {
+            const pool = QUESTIONS_DATABASE[letter] || [];
+            let typeFiltered = pool;
+            if (type === 'islamic') { typeFiltered = pool.filter(q => q.type === 'islamic'); }
+            let diffFiltered = typeFiltered.filter(q => q.difficulty === diff);
+            if (diffFiltered.length > 0) return diffFiltered[Math.floor(Math.random() * diffFiltered.length)];
+            if (typeFiltered.length > 0) return typeFiltered[Math.floor(Math.random() * typeFiltered.length)];
+            if (pool.length > 0) return pool[Math.floor(Math.random() * pool.length)];
+
+            return {
+                letter, question: `سؤال مباشر بحرف (${letter}) يطرحه الموجه بشكل مباشر.`, answer: "متروك للموجه",
+                category: type === 'islamic' ? "إسلاميات" : "ثقافة عامة", difficulty: diff, type: type === 'islamic' ? 'islamic' : 'general'
+            };
+        }
+
+        function resetCurrentGame() {
+            if (confirm("هل تريد إعادة إنشاء اللوحة وتصفير النتائج؟")) {
+                generateHoneycombGrid();
+            }
+        }
+
+        function logAction(msg) {
+            const logsContent = document.getElementById('logs-content');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry animate-fade-in';
+            entry.innerHTML = `<span class="log-bullet">•</span> ${msg}`;
+            logsContent.insertBefore(entry, logsContent.firstChild);
+        }
+
+        function updateOmarLive(expression, speech) {
+            document.getElementById('aziz-speech-bubble').textContent = speech;
+            document.getElementById('live-aziz-face').className = `aziz-face ${expression}`;
+        }
+
+        function triggerConfetti() {
+            const container = document.getElementById('confetti-container');
+            container.innerHTML = ''; container.style.display = 'block';
+            const colors = ["#ef4444", "#10b981", "#ffeb3b", "#06b6d4", "#a855f7"];
+            for (let i = 0; i < 80; i++) {
+                const piece = document.createElement('div'); piece.className = 'confetti-piece';
+                piece.style.left = `${Math.random() * 100}%`; piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                piece.style.width = `${Math.random() * 10 + 6}px`; piece.style.height = `${Math.random() * 20 + 8}px`;
+                piece.style.animationDelay = `${Math.random() * 4}s`; piece.style.animationDuration = `${Math.random() * 3 + 2}s`;
+                container.appendChild(piece);
+            }
+        }
+    </script>
+</body>
+</html>
